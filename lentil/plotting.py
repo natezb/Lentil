@@ -34,7 +34,7 @@ def _magify(outer, units):
     return [inner.to(units).magnitude for inner in outer]
 
 
-def plot_profile(q_start_t_r, q_start_s_r, lambda0, elems, cyclical=False,
+def plot_profile(q_start_t, q_start_s, elems, cyclical=False,
                  names=tuple(), clipping=None, show_axis=False,
                  show_waists=False, zeroat=0, zunits='mm', runits='um'):
     """
