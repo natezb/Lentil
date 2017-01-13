@@ -34,8 +34,8 @@ def _magify(outer, units):
     return [inner.to(units).magnitude for inner in outer]
 
 
-def plot_profile(q_start_t, q_start_s, elems, cyclical=False,
-                 names=tuple(), clipping=None, show_axis=False,
+def plot_profile(q_start_t, q_start_s, elems, z_start=None, z_end=None,
+                 cyclical=False, names=tuple(), clipping=None, show_axis=False,
                  show_waists=False, zeroat=0, zunits='mm', runits='um'):
     """
     Plot tangential and sagittal beam profiles.
@@ -81,10 +81,8 @@ def plot_profile(q_start_t, q_start_s, elems, cyclical=False,
         Units to use for the radial axis. Must have units of [length]. Defaults
         to 'um'.
     """
-    zs, profs_t, RoCs = get_profiles(q_start_t_r, lambda0, 'tangential', elems,
-                                     clipping, zeroat)
-    zs, profs_s, RoCs = get_profiles(q_start_s_r, lambda0, 'sagittal', elems,
-                                     clipping, zeroat)
+    zs, profs_t, RoCs = get_profiles(q_start_t, 'tangential', elems, z_start, z_end, clipping)
+    zs, profs_s, RoCs = get_profiles(q_start_s, 'sagittal', elems, z_start, z_end, clipping)
 
     # Convert lists of Quantity-arrays
     zs_mag = _magify(zs, zunits)
