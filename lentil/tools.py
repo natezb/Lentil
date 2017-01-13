@@ -5,7 +5,7 @@ import numpy as np
 from functools import reduce
 from numpy import sqrt, complex, sign, linspace, pi
 from scipy.special import erfinv
-from .elements import Space
+from .elements import Identity
 from . import Q_
 
 
@@ -32,7 +32,7 @@ class BeamParam(object):
         z0 : Quantity([Length])
           The z-position of the focus
         """
-        wavlen = Q_(wavlen).to('nm')
+        self.wavlen = Q_(wavlen).to('nm')
         z0 = Q_(z0).to('mm')
         zR = Q_(zR).to('mm')
         self.q0 = -z0 + 1j * zR  # q(z=0)
@@ -45,7 +45,7 @@ class BeamParam(object):
     @property
     def z0(self):
         """The z-position of the focus"""
-        return _get_real(self.q0)
+        return -_get_real(self.q0)
 
     @property
     def w0(self):
@@ -82,10 +82,14 @@ class BeamParam(object):
 
         return R
 
-    def apply_ABCD(self, M):
+    def apply_ABCD(self, M, z, wavlen=None):
         """Return a new BeamParam resulting from applying an ABCD matrix M."""
+        z = Q_(z).to('mm')
+        wavlen = wavlen or self.wavlen
         A, B, C, D = M.elems()
-        q_r = (C + D*q_r)/(A + B*q_r)
+        q = self.q(z)
+        q_new = (A*q + B) / (C*q + D)
+        return BeamParam(wavlen, z0=(z-_get_real(q_new)), zR=_get_imag(q_new))
 
 
 def _find_cavity_mode(M):
@@ -135,30 +139,24 @@ def _unitful_linspace(start, stop, *args, **kwds):
     return Q_(raw_pts, units)
 
 
-def get_profiles(q, orientation, elements, clipping=None):
+def get_profiles(q, orientation, elements, z_start=None, z_end=None, clipping=None):
     zs, profiles, RoCs = [], [], []
-    cur_z = Q_(0, 'mm')
-    z0 = Q_(0, 'mm')
 
-    rev_elems = list((elements))
-    for i, el in enumerate(rev_elems):
-        if i == zeroat % len(rev_elems):
-            z0 = cur_z
+    elems = sorted(elements, key=lambda el: el.z)
+    if z_start is not None:
+        elems.insert(0, Identity(z_start))
+    if z_end is not None:
+        elems.append(Identity(z_end))
 
-        # Get beam profile inside 'Space' elements
-        if isinstance(el, Space):
-            z = _unitful_linspace(cur_z, cur_z + el.d, 10000, endpoint=(i == len(rev_elems)-1))
-            zs.append(z)
-            profiles.append(q.profile(z, el.n, clipping))
-            RoCs.append(q.roc(z, el.n))
-            cur_z += el.d
-
-        # Propagate q_r through the current element
+    el = elems.pop(0)
+    for next_el in elems:
         M = el.sag if orientation == 'sagittal' else el.tan
-        A, B, C, D = M.elems()
-        q_r = (C + D*q_r)/(A + B*q_r)
+        q = q.apply_ABCD(M, el.z)
 
-    for i, z in enumerate(zs):
-        zs[i] = z-z0
+        z = _unitful_linspace(el.z, next_el.z, 1000)
+        zs.append(z)
+        profiles.append(q.profile(z, el.n, clipping))
+        RoCs.append(q.roc(z))
+        el = next_el
 
     return zs, profiles, RoCs
