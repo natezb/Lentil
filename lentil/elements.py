@@ -107,9 +107,9 @@ class ABCD(object):
 
 
 class OpticalElement(object):
-    def __init__(self, tan, sag):
-        self.tan = tan
-        self.sag = sag
+    def __init__(self, z):
+        self.n = 1
+        self.z = z
 
     def __mul__(self, other):
         tan = self.tan * other.tan
@@ -121,10 +121,23 @@ class OpticalElement(object):
         sag = other.sag * self.sag
         return OpticalElement(tan, sag)
 
+    def __repr__(self):
+        return "<{} z={}>".format(self.__class__.__name__, self.z)
+
+
+class Identity(OpticalElement):
+    """A dummy element"""
+    def __init__(self, z):
+        OpticalElement.__init__(self, z)
+        self.n = 1
+        self.z = Q_(z).to('mm')
+        self.tan = self.sag = ABCD(1,          '0 mm/rad',
+                                   '0 rad/mm', 1         )
+
 
 class Space(OpticalElement):
     """A space between other optical elements"""
-    def __init__(self, d, n=1):
+    def __init__(self, z, d, n=1):
         """
         Parameters
         ----------
@@ -133,6 +146,7 @@ class Space(OpticalElement):
         n : number, optional
             The index of refraction of the medium. Defaults to 1 for vacuum.
         """
+        OpticalElement.__init__(self, z)
         d = Q_(d).to('mm/rad')
 
         self.tan = ABCD(1,          d,
@@ -144,13 +158,14 @@ class Space(OpticalElement):
 
 class Lens(OpticalElement):
     """A thin lens"""
-    def __init__(self, f):
+    def __init__(self, z, f):
         """
         Parameters
         ----------
         f : Quantity or str
             The focal length of the lens
         """
+        OpticalElement.__init__(self, z)
         f = Q_(f).to('mm/rad')
 
         self.tan = ABCD( 1,   '0 mm/rad',
@@ -160,7 +175,7 @@ class Lens(OpticalElement):
 
 class Mirror(OpticalElement):
     """A mirror, possibly curved"""
-    def __init__(self, R=None, aoi=0):
+    def __init__(self, z, R=None, aoi=0):
         """
         Parameters
         ----------
@@ -172,6 +187,7 @@ class Mirror(OpticalElement):
             angle between the mirror's surface normal and the beam's axis.
             Defaults to 0, indicating normal incidence.
         """
+        OpticalElement.__init__(self, z)
         R = Q_(R).to('mm') if R else Q_(float('inf'), 'mm')
         aoi = _parse_angle(aoi)
 
@@ -183,7 +199,7 @@ class Mirror(OpticalElement):
 
 class Interface(OpticalElement):
     """An interface between media with different refractive indices"""
-    def __init__(self, n1, n2, R=None, aoi=None, aot=None):
+    def __init__(self, z, n1, n2, R=None, aoi=None, aot=None):
         """
         Parameters
         ----------
@@ -206,6 +222,7 @@ class Interface(OpticalElement):
             defined as the angle between the interface's surface normal and
             the *transmitted* beam's axis. See `aoi` for more details.
         """
+        OpticalElement.__init__(self, z)
         R = Q_(R).to('mm') if R else Q_(float('inf'), 'mm')
 
         if aoi is None:
