@@ -5,7 +5,7 @@ import numpy as np
 from functools import reduce
 from numpy import sqrt, complex, sign, linspace, pi
 from scipy.special import erfinv
-from .elements import Identity
+from .elements import OpticalElement, Identity
 from . import Q_
 
 
@@ -20,8 +20,11 @@ def _get_imag(q):
 
 
 class BeamParam(object):
-    """An object representing a complex beam parameter"""
-    def __init__(self, wavlen, zR, z0):
+    """An object representing a reduced complex beam parameter
+
+    Uses Siegman's convention of q-hat, i.e. q is 'reduced' by n.
+    """
+    def __init__(self, wavlen, zR, z0, n=1):
         """
         Parameters
         ----------
@@ -31,6 +34,8 @@ class BeamParam(object):
           The Rayleigh range
         z0 : Quantity([Length])
           The z-position of the focus
+        n : int or float
+          The refractive index where the beam parameter is being defined
         """
         self.wavlen = Q_(wavlen).to('nm')
         z0 = Q_(z0).to('mm')
@@ -139,18 +144,33 @@ def _unitful_linspace(start, stop, *args, **kwds):
     return Q_(raw_pts, units)
 
 
-def get_profiles(q, orientation, elements, z_start=None, z_end=None, clipping=None):
+def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clipping=None):
     zs, profiles, RoCs = [], [], []
 
-    elems = sorted(elements, key=lambda el: el.z)
+    elems = []
+    ns = []  # n2(i) for each element el(i)
+    for el in elements:
+        if isinstance(el, OpticalElement):
+            elems.append(el)
+            ns.append(n)
+        else:
+            ns[-1] = el
+
+    # elems = sorted(elements, key=lambda el: el.z)
     if z_start is not None:
         elems.insert(0, Identity(z_start))
+        ns.insert(0, n)
     if z_end is not None:
         elems.append(Identity(z_end))
+        ns.append(n)
+
+    print(elems)
+    print(ns)
 
     el = elems.pop(0)
-    for next_el in elems:
-        M = el.sag if orientation == 'sagittal' else el.tan
+    n1 = n
+    for next_el, n2 in zip(elems, ns):
+        M = (el.sag if orientation == 'sagittal' else el.tan)(n1, n2)
         q = q.apply_ABCD(M, el.z)
 
         z = _unitful_linspace(el.z, next_el.z, 1000)
@@ -158,5 +178,6 @@ def get_profiles(q, orientation, elements, z_start=None, z_end=None, clipping=No
         profiles.append(q.profile(z, el.n, clipping))
         RoCs.append(q.roc(z))
         el = next_el
+        n1 = n2
 
     return zs, profiles, RoCs

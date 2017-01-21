@@ -81,8 +81,8 @@ def plot_profile(q_start_t, q_start_s, elems, z_start=None, z_end=None,
         Units to use for the radial axis. Must have units of [length]. Defaults
         to 'um'.
     """
-    zs, profs_t, RoCs = get_profiles(q_start_t, 'tangential', elems, z_start, z_end, clipping)
-    zs, profs_s, RoCs = get_profiles(q_start_s, 'sagittal', elems, z_start, z_end, clipping)
+    zs, profs_t, RoCs = get_profiles(q_start_t, 'tangential', elems, z_start, z_end, 1, clipping)
+    zs, profs_s, RoCs = get_profiles(q_start_s, 'sagittal', elems, z_start, z_end, 1, clipping)
 
     # Convert lists of Quantity-arrays
     zs_mag = _magify(zs, zunits)

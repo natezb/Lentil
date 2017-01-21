@@ -18,6 +18,12 @@ def _parse_angle(ang):
     return ang
 
 
+def ensure_units(value, units):
+    if value == 0:
+        return Q_(0, units)  # Allow passing in bare zeros
+    return Q_(value).to(units)
+
+
 class ABCD(object):
     """A simple ABCD (ray transfer) matrix class.
 
@@ -38,10 +44,10 @@ class ABCD(object):
             `A` and `D` are dimensionless. `B` has units of [length] (e.g. 'mm'
             or 'rad/mm'), and `C` has units of 1/[length].
         """
-        self.A = Q_(A).to('dimensionless')
-        self.B = Q_(B).to('mm/rad')
-        self.C = Q_(C).to('rad/mm')
-        self.D = Q_(D).to('dimensionless')
+        self.A = ensure_units(A, 'dimensionless')
+        self.B = ensure_units(B, 'mm/rad')
+        self.C = ensure_units(C, 'rad/mm')
+        self.D = ensure_units(D, 'dimensionless')
 
     def __mul__(self, other):
         if isinstance(other, ABCD):
@@ -124,15 +130,27 @@ class OpticalElement(object):
     def __repr__(self):
         return "<{} z={}>".format(self.__class__.__name__, self.z)
 
+    def tan(self, n1, n2):
+        """The ABCD matrix for a tangential beam, given left and right refractive indices"""
+        return self._tan(n1, n2) if callable(self._tan) else self._tan
+
+    def sag(self, n1, n2):
+        """The ABCD matrix for a sagittal beam, given left and right refractive indices"""
+        return self._sag(n1, n2) if callable(self._sag) else self._sag
+
 
 class Identity(OpticalElement):
     """A dummy element"""
     def __init__(self, z):
         OpticalElement.__init__(self, z)
         self.n = 1
-        self.z = Q_(z).to('mm')
-        self.tan = self.sag = ABCD(1,          '0 mm/rad',
-                                   '0 rad/mm', 1         )
+        self.z = ensure_units(z, 'mm')
+        self._tan = self._sag = IdentityABCD()
+
+
+class IdentityABCD(ABCD):
+    def __init__(self):
+        ABCD.__init__(self, 1, 0, 0, 1)
 
 
 class Space(OpticalElement):
@@ -147,13 +165,15 @@ class Space(OpticalElement):
             The index of refraction of the medium. Defaults to 1 for vacuum.
         """
         OpticalElement.__init__(self, z)
-        d = Q_(d).to('mm/rad')
-
-        self.tan = ABCD(1,          d,
-                        '0 rad/mm', 1)
-        self.sag = self.tan
         self.d = d
         self.n = n
+        self._tan = self._sag = SpaceABCD(d, n)
+
+
+class SpaceABCD(ABCD):
+    def __init__(self, d, n=1):
+        d = ensure_units(d, 'mm/rad')
+        ABCD.__init__(self, 1, d/n, 0, 1)
 
 
 class Lens(OpticalElement):
@@ -166,11 +186,13 @@ class Lens(OpticalElement):
             The focal length of the lens
         """
         OpticalElement.__init__(self, z)
-        f = Q_(f).to('mm/rad')
+        self._tan = self._sag = LensABCD(f)
 
-        self.tan = ABCD( 1,   '0 mm/rad',
-                        -1/f,     1     )
-        self.sag = self.tan
+
+class LensABCD(ABCD):
+    def __init__(self, f):
+        f = ensure_units(f, 'mm/rad')
+        ABCD.__init__(self, 1, 0, -1/f, 1)
 
 
 class Mirror(OpticalElement):
@@ -191,10 +213,18 @@ class Mirror(OpticalElement):
         R = Q_(R).to('mm') if R else Q_(float('inf'), 'mm')
         aoi = _parse_angle(aoi)
 
-        self.tan = ABCD(1,              '0 mm/rad',
-                        -2/(R*cos(aoi)),     1    )
-        self.sag = ABCD(1,              '0 mm/rad',
-                        -2*cos(aoi)/R,       1    )
+        self._tan = MirrorABCD(R, aoi, 'tangential')
+        self._sag = MirrorABCD(R, aoi, 'sagittal')
+
+
+class MirrorABCD(ABCD):
+    def __init__(self, R, aoi, orientation):
+        if orientation == 'tangential':
+            Re = R * cos(aoi)
+        else:
+            Re = R / cos(aoi)
+
+        ABCD.__init__(self, 1, 0, -2/Re, 1)
 
 
 class Interface(OpticalElement):
@@ -223,25 +253,31 @@ class Interface(OpticalElement):
             the *transmitted* beam's axis. See `aoi` for more details.
         """
         OpticalElement.__init__(self, z)
-        R = Q_(R).to('mm') if R else Q_(float('inf'), 'mm')
 
         if aoi is None:
             if aot is None:
-                theta1 = Q_(0)
-                theta2 = Q_(0)
+                a1 = Q_(0)
+                a2 = Q_(0)
             else:
-                theta2 = _parse_angle(aot)
-                theta1 = arcsin(n2/n1*sin(theta2))
+                a2 = _parse_angle(aot)
+                a1 = arcsin(n2/n1*sin(a2))
         else:
             if aot is None:
-                theta1 = _parse_angle(aoi)
-                theta2 = arcsin(n1/n2*sin(theta1))
+                a1 = _parse_angle(aoi)
+                a2 = arcsin(n1/n2*sin(a1))
             else:
                 raise Exception("Cannot specify both aoi and aot")
 
-        d_ne_t = 1/cos(theta1) - n1/(n2*cos(theta2))
-        d_ne_s = cos(theta2) - n1/n2*cos(theta1)
-        self.tan = ABCD(cos(theta2)/cos(theta1),            '0 mm/rad',
-                        d_ne_t/R,                n1/n2*cos(theta1)/cos(theta2))
-        self.sag = ABCD(   1,     '0 mm/rad',
-                        d_ne_s/R,   n1/n2   )
+        self._tan = lambda n1,n2: InterfaceABCD(n1, n2, R, a1, a2, 'tangential')
+        self._sag = lambda n1,n2: InterfaceABCD(n1, n2, R, a1, a2, 'sagittal')
+
+
+class InterfaceABCD(ABCD):
+    def __init__(self, n1, n2, R, a1, a2, orientation):
+        R = ensure_units(R or float('inf'), 'mm')
+        if orientation == 'tangential':
+            dne = (n2 * cos(a2) - n1 * cos(a2)) / (cos(a1) * cos(a2))
+            ABCD.__init__(self, cos(a2)/cos(a1), 0, dne/R, cos(a1)/cos(a2))
+        else:
+            dne = n2 * cos(a2) - n1 * cos(a1)
+            ABCD.__init__(self, 1, 0, dne/R, 1)
