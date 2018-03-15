@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-# Copyright 2013-2017 Nate Bogdanowicz
-
+# Copyright 2013-2018 Nate Bogdanowicz
 import numpy as np
 from functools import reduce
-from numpy import sqrt, complex, sign, linspace, pi
+from numpy import sqrt, complex, sign, pi
 from scipy.special import erfinv
 from .elements import OpticalElement, Identity
-from . import Q_
+from .util import Q_, pairwise, unitful_linspace
 
 
 def _get_real(q):
@@ -135,13 +134,6 @@ def find_cavity_modes(elems):
     qt_r = _find_cavity_mode(reduce(lambda x, y: y*x, [el.tan for el in elems]))
     qs_r = _find_cavity_mode(reduce(lambda x, y: y*x, [el.sag for el in elems]))
     return qt_r, qs_r
-
-
-def _unitful_linspace(start, stop, *args, **kwds):
-    start, stop = Q_(start), Q_(stop)
-    units = start.units
-    raw_pts = linspace(start.m, stop.m_as(units), *args, **kwds)
-    return Q_(raw_pts, units)
 
 
 def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clipping=None):

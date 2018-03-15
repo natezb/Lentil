@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-# Copyright 2013-2017 Nate Bogdanowicz
-
+# Copyright 2013-2018 Nate Bogdanowicz
 from numbers import Number
 from numpy import cos, sin, arcsin
-from . import Q_
+from .util import Q_, pairwise, unitful_linspace
 
 
 def _parse_angle(ang):
