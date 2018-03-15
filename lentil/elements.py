@@ -303,3 +303,83 @@ class InterfaceABCD(ABCD):
         else:
             dne = n2 * cos(a2) - n1 * cos(a1)
             ABCD.__init__(self, 1, 0, dne/R, 1)
+
+
+class BeamPath(object):
+    def __init__(self, elements):
+        """A beam path to propagate through.
+
+        Parameters
+        ----------
+        elements : list
+             An ordered list of optical elements, optionally separated by numbers indicating the
+        refractive indices. If a refractive index is omitted, it is assumed to be the same as the
+        previous index. If not given, the initial index is 1.
+        """
+        n = 1.
+        self.elems = []
+        self.ns = [n]
+        for elem in elements:
+            if isinstance(elem, OpticalElement):
+                self.elems.append(elem)
+                self.ns.append(n)
+            else:
+                # Update previous n
+                n = float(elem)
+                self.ns[-1] = n
+
+    @property
+    def n_pairs(self):
+        return list(pairwise(self.ns))
+
+    def get_profiles(self, q, orientation, z_start=None, z_end=None, n=1, clipping=None):
+        elems = self.elems.copy()
+        ns = self.ns.copy()
+
+        # Consider *always* adding Identity elements, so we have at least 2 elements
+        if z_start is not None:
+            elems.insert(0, Identity(z_start))
+            ns.insert(0, n)
+        if z_end is not None:
+            elems.append(Identity(z_end))
+            ns.append(n)
+
+        print(elems)
+        print(ns)
+
+        zs, Ms, n_pairs = [], [], []
+        for el, (n1, n2) in zip(elems, pairwise(ns)):
+            el_zs, el_Ms, el_n_pairs = el.tan_list(n1, n2)
+            zs.extend(el_zs)
+            Ms.extend(el_Ms)
+            n_pairs.extend(el_n_pairs)
+
+        print(zs)
+        print(n_pairs)
+
+        all_zs, profiles, RoCs = [], [], []
+        for M, (z_M, z_next_M), (_, n) in zip(Ms, pairwise(zs), n_pairs):
+            q = q.apply_ABCD(M, z_M)
+            z = unitful_linspace(z_M, z_next_M, 1000)
+            all_zs.append(z)
+            profiles.append(q.profile(z, n, clipping))
+            RoCs.append(q.roc(z))
+        return all_zs, profiles, RoCs
+
+        zs, profiles, RoCs = [], [], []
+        zs, Ms, n_pairs = [], [], []
+        for (el, next_el), (n1,n2) in zip(pairwise(elems), pairwise(ns)):
+            # Transform beam parameter
+            el_zs, el_Ms, el_n_pairs = el.tan_list(n1, n2)
+            #M = (el.sag if orientation == 'sagittal' else el.tan)(n1, n2)
+
+            for z_M, M, (n1_M, n2_M) in zip(el_zs, el_Ms, el_n_pairs):
+                q = q.apply_ABCD(M, z_M)
+
+                # Calculate beam info within region
+                z = unitful_linspace(el.z, next_el.z, 1000)
+                zs.append(z)
+                profiles.append(q.profile(z, el.n, clipping))
+                RoCs.append(q.roc(z))
+
+        return zs, profiles, RoCs
