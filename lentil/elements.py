@@ -145,6 +145,21 @@ class OpticalElement(object):
         return zs, Ms, pairwise(ns)
 
 
+class FlatSlab(OpticalElement):
+    def __init__(self, z, dz, n):
+        OpticalElement.__init__(self, z)
+        self.dz = ensure_units(dz, 'mm')
+        self.n = n
+
+        self.left = Interface(self.z, None, None)
+        self.right = Interface(self.z+self.dz, None, None)
+
+    def tan_list(self, n1, n2):
+        zs = [self.left.z, self.right.z]
+        Ms = [self.left.tan(n1, self.n), self.right.tan(self.n, n2)]
+        ns = [n1, self.n, n2]
+        return zs, Ms, pairwise(ns)
+
 
 class Identity(OpticalElement):
     """A dummy element"""
