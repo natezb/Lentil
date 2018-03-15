@@ -114,7 +114,7 @@ class ABCD(object):
 class OpticalElement(object):
     def __init__(self, z):
         self.n = 1
-        self.z = z
+        self.z = ensure_units(z, 'mm')
 
     def __mul__(self, other):
         tan = self.tan * other.tan
@@ -273,7 +273,7 @@ class Interface(OpticalElement):
 
 class InterfaceABCD(ABCD):
     def __init__(self, n1, n2, R, a1, a2, orientation):
-        R = ensure_units(R or float('inf'), 'mm')
+        R = ensure_units(R or Q_(float('inf'), 'mm'), 'mm')
         if orientation == 'tangential':
             dne = (n2 * cos(a2) - n1 * cos(a2)) / (cos(a1) * cos(a2))
             ABCD.__init__(self, cos(a2)/cos(a1), 0, dne/R, cos(a1)/cos(a2))
