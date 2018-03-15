@@ -41,6 +41,48 @@ class BeamParam(object):
         zR = Q_(zR).to('mm')
         self.q0 = -z0 + 1j * zR  # q(z=0)
 
+    @classmethod
+    def from_q(cls, q, wavlen, z='0mm', n=1):
+        z = Q_(z).to('mm')
+        zR = _get_imag(q)
+        z0 = z - _get_real(q)
+        return BeamParam(wavlen, zR, z0, n)
+
+    @classmethod
+    def from_waist(cls, wavlen, w0, z0='0mm', n=1):
+        wavlen = Q_(wavlen).to('nm')
+        w0 = Q_(w0).to('mm')
+        z0 = Q_(z0).to('mm')
+        zR = pi * w0**2 / wavlen
+        return BeamParam(wavlen, zR, z0, n)
+
+    @classmethod
+    def from_widths(cls, wavlen, z1, w1, z2, w2, n=1, focus_location='left'):
+        wavlen = Q_(wavlen).to('nm')
+        z1 = Q_(z1).to('mm')
+        z2 = Q_(z2).to('mm')
+        w1 = Q_(w1).to('mm')
+        w2 = Q_(w2).to('mm')
+
+        if focus_location == 'left':
+            zR_sign = +1
+            z0_sign = -1
+        elif focus_location == 'right':
+            zR_sign = +1
+            z0_sign = +1
+        elif focus_location == 'between':
+            zR_sign = -1
+            z0_sign = -1 if z1 < z2 else +1
+        else:
+            raise ValueError
+        # NOTE: wavlen should be wavlen in medium
+        # zR expression derived using Wolfram Cloud
+        zR_num = (w1**2 + w2**2) + zR_sign * 2*sqrt(w1**2*w2**2 - ((wavlen/pi*(z1-z2))**2))
+        zR_den = pi/wavlen*((w1**2-w2**2)/(z1-z2))**2 + 4*wavlen/pi
+        zR = zR_num/zR_den
+        z0 = z1 + z0_sign * sqrt(zR * (pi/wavlen*w1**2 - zR))
+        return cls(wavlen, zR, z0)
+
     @property
     def zR(self):
         """Rayleigh range"""
