@@ -136,9 +136,7 @@ def find_cavity_modes(elems):
     return qt_r, qs_r
 
 
-def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clipping=None):
-    zs, profiles, RoCs = [], [], []
-
+def _get_element_indices(elements, n):
     elems = []
     ns = []  # n2(i) for each element el(i)
     for el in elements:
@@ -148,7 +146,12 @@ def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clippi
         else:
             ns[-1] = el
 
-    # elems = sorted(elements, key=lambda el: el.z)
+    return elems, ns
+
+
+def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clipping=None):
+    zs, profiles, RoCs = [], [], []
+    elems, ns = _get_element_indices(elements, n)
     if z_start is not None:
         elems.insert(0, Identity(z_start))
         ns.insert(0, n)
@@ -156,20 +159,20 @@ def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clippi
         elems.append(Identity(z_end))
         ns.append(n)
 
-    print(elems)
-    print(ns)
+    zs, Ms, n_pairs = [], [], []
+    for (el, next_el), (n1,n2) in zip(pairwise(elems), pairwise(ns)):
+        # Transform beam parameter
+        # FIXME: Add sag_list()
+        el_zs, el_Ms, el_n_pairs = el.tan_list(n1, n2)
+        #M = (el.sag if orientation == 'sagittal' else el.tan)(n1, n2)
 
-    el = elems.pop(0)
-    n1 = n
-    for next_el, n2 in zip(elems, ns):
-        M = (el.sag if orientation == 'sagittal' else el.tan)(n1, n2)
-        q = q.apply_ABCD(M, el.z)
+        for z_M, M, (n1_M, n2_M) in zip(el_zs, el_Ms, el_n_pairs):
+            q = q.apply_ABCD(M, z_M)
 
-        z = _unitful_linspace(el.z, next_el.z, 1000)
-        zs.append(z)
-        profiles.append(q.profile(z, el.n, clipping))
-        RoCs.append(q.roc(z))
-        el = next_el
-        n1 = n2
+            # Calculate beam info within region
+            z = unitful_linspace(el.z, next_el.z, 1000)
+            zs.append(z)
+            profiles.append(q.profile(z, el.n, clipping))
+            RoCs.append(q.roc(z))
 
     return zs, profiles, RoCs
