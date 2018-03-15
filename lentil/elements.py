@@ -137,6 +137,14 @@ class OpticalElement(object):
         """The ABCD matrix for a sagittal beam, given left and right refractive indices"""
         return self._sag(n1, n2) if callable(self._sag) else self._sag
 
+    def tan_list(self, n1, n2):
+        # Default implementation
+        zs = [self.z]
+        Ms = [self.tan(n1, n2)]
+        ns = [n1, n2]
+        return zs, Ms, pairwise(ns)
+
+
 
 class Identity(OpticalElement):
     """A dummy element"""
