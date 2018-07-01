@@ -6,6 +6,7 @@ from numpy import sqrt, complex, sign, pi
 from scipy.special import erfinv
 from .elements import OpticalElement, Identity
 from .util import Q_, pairwise, unitful_linspace
+from .util import u, Q_, pairwise, unitful_linspace, argrelmin
 
 
 def _get_real(q):
@@ -218,3 +219,219 @@ def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clippi
             RoCs.append(q.roc(z))
 
     return zs, profiles, RoCs
+
+
+class BeamPath(object):
+    def __init__(self, elements):
+        """A beam path to propagate through.
+
+        Parameters
+        ----------
+        elements : list
+             An ordered list of optical elements, optionally separated by numbers indicating the
+        refractive indices. If a refractive index is omitted, it is assumed to be the same as the
+        previous index. If not given, the initial index is 1.
+        """
+        self.elems, self.ns = extract_elems_ns(elements)
+
+    def __repr__(self):
+        elem_strs = ('  ' + repr(e) for e in self.elems)
+        n_strs = ('    ({})'.format(n) for n in self.ns)
+        return '<BeamPath [\n{}\n]>'.format('\n'.join(zipper(n_strs, elem_strs)))
+
+    def __getitem__(self, key):
+        if not isinstance(key, slice):
+            raise TypeError('Index must be a slice')
+        if key.step is not None:
+            raise ValueError('Index slice cannot have a step')
+        start, stop, _ = key.indices(len(self.elems))
+        path = BeamPath([])
+        path.elems = self.elems[start:stop]
+        path.ns = self.ns[start:stop+1]
+        return path
+
+    @property
+    def n_pairs(self):
+        return list(pairwise(self.ns))
+
+    @property
+    @listify
+    def elems_with_spaces(self):
+        yield self.elems[0]
+        z_prev = self.elems[0].z
+        for el, n in zip(self.elems[1:], self.ns[1:]):
+            #yield Space(z_prev, d=el.z-z_prev, n=n)
+            yield el
+            z_prev = el.z + el.dz
+
+    @property
+    @listify
+    def ns_with_spaces(self):
+        yield self.ns[0]
+        for n in self.ns[1:]:
+            yield n  # for Space
+            yield n  # for Element
+
+    @property
+    def n_pairs_with_spaces(self):
+        return list(pairwise(self.ns_with_spaces))
+
+    @property
+    def Ms_tan(self):
+        #yield from self.elems[0].tan_list(self.)
+        for el, (n1,n2) in zip(self.elems_with_spaces, self.n_pairs_with_spaces):
+            pass
+
+    def get_profiles(self, q, orientation, z_start=None, z_end=None, n=1, z_q=None, clipping=None):
+        zs, Ms_tan, Ms_sag, n_pairs = path_info(self.elems, self.ns, z_start, z_end)
+        Ms = Ms_tan if orientation == 'tangential' else Ms_sag
+
+        # TODO: Maybe make this more efficient
+        if z_q is not None:
+            # Propagate q back to start
+            z_q = ensure_units(z_q, 'mm')
+            for M, z_M, (n1, n2) in reversed(list(zip(Ms, zs, n_pairs))):
+                if z_M > z_q:
+                    continue  # Apply only M's left of z_q
+                q = q.unapply_ABCD(M, z_M, n1=n1)
+
+        all_zs, profiles, RoCs = [], [], []
+        for M, (z_M, z_next_M), (n1, n2) in zip(Ms, pairwise(zs), n_pairs):
+            # FIXME: Clear up this wavlen/n business
+            q = q.apply_ABCD(M, z_M, n2=n2)
+            z = unitful_linspace(z_M, z_next_M, 1000)
+            all_zs.append(z)
+            profiles.append(q.profile(z, clipping))
+            RoCs.append(q.roc(z))
+        return all_zs, profiles, RoCs
+
+    def find_cavity_modes(self, wavlen, n=1, ring=True):
+        """Find the eigenmodes of an optical cavity defined by this BeamPath
+
+        The first and last elements of this BeamPath should be mirrors.
+
+        Parameters
+        ----------
+        wavlen : Quantity([Length])
+          The wavelength of the beam in this medium
+        ring : bool
+            If True, solve as a ring cavity. Otherwise, assumes the beam travels back through the
+            optical elements, in a standing-wave configuration (like a Fabry-Perot cavity).
+
+        Returns
+        -------
+        qt, qs : BeamParams
+            beam parameter for the tangential and sagittal modes, respectively.
+        """
+        # FIXME: Verify we're doing the right thing regarding wavelengths and n's
+        wavlen = Q_(wavlen).to('nm')
+        zs, Ms_tan, Ms_sag, n_pairs = path_info(self.elems, self.ns, add_spaces=True)
+
+        if not ring:
+            Ms_tan = Ms_tan + Ms_tan[-2:0:-1]  # ABCDE -> ABCDEDCB
+            Ms_sag = Ms_sag + Ms_sag[-2:0:-1]  # ABCDE -> ABCDEDCB
+
+        qt_r = _find_cavity_mode(combine(Ms_tan))
+        qs_r = _find_cavity_mode(combine(Ms_sag))
+
+        qt = BeamParam.from_q(1/qt_r, wavlen=wavlen, n=n, z=zs[0])
+        qs = BeamParam.from_q(1/qs_r, wavlen=wavlen, n=n, z=zs[0])
+        return qt, qs
+
+    def plot_profile(self, q_start_t, q_start_s, z_q=None, z_start=None, z_end=None, cyclical=False,
+                     names=tuple(), clipping=None, show_axis=False, show_waists=False, zeroat=0,
+                     zunits='mm', runits='um', ax=None, **kwds):
+        zs, profs_t, RoCs = self.get_profiles(q_start_t, 'tangential', z_start, z_end, 1, z_q=z_q,
+                                              clipping=clipping)
+        zs, profs_s, RoCs = self.get_profiles(q_start_s, 'sagittal', z_start, z_end, 1, z_q=z_q,
+                                              clipping=clipping)
+        # Convert lists of Quantity-arrays
+        from .plotting import _magify
+        zs_mag = _magify(zs, zunits)
+        profs_t_mag = _magify(profs_t, runits)
+        profs_s_mag = _magify(profs_s, runits)
+        # RoC_mag = _magify(RoC, runits)
+
+        if ax is None:
+            from matplotlib.pyplot import subplots
+            _, ax = subplots()
+        margin = .0002e3
+        ax.set_xlim([zs_mag[0][0]-margin, zs_mag[-1][-1]+margin])
+
+        # Concatenate list into a single Quantity-array
+        z_mag = np.concatenate(zs_mag)
+        prof_t_mag = np.concatenate(profs_t_mag)
+        prof_s_mag = np.concatenate(profs_s_mag)
+
+        t_kwds = dict(color='b', linewidth=3)
+        t_kwds.update(kwds)
+        s_kwds = dict(color='r', linewidth=3)
+        s_kwds.update(kwds)
+        ax.plot(z_mag, prof_t_mag, label='Tangential beam', **t_kwds)
+        ax.plot(z_mag, prof_s_mag, label='Sagittal beam', **s_kwds)
+
+        if show_waists:
+            # Mark waists
+            # Should use scipy.signal.argrelextrema, but it's not available before 0.11
+            t_waist_indices = argrelmin(prof_t_mag)
+            s_waist_indices = argrelmin(prof_s_mag)
+            for i in t_waist_indices:
+                ax.annotate('{:.3f} {}'.format(prof_t_mag[i], runits),
+                            (z_mag[i], prof_t_mag[i]),
+                            xytext=(0, 30), textcoords='offset points',
+                            ha='center', arrowprops=dict(arrowstyle="->"))
+            for i in s_waist_indices:
+                ax.annotate('{:.3f} {}'.format(prof_s_mag[i], runits),
+                            (z_mag[i], prof_s_mag[i]), xytext=(0, 30),
+                            textcoords='offset points', ha='center',
+                            arrowprops={'arrowstyle': '->'})
+
+        ax.set_xlabel('Position ({})'.format(zunits))
+        if clipping is not None:
+            ylabel = ('Distance from beam axis for clipping of ' +
+                      '{:.1e} ({})'.format(clipping, runits))
+        else:
+            ylabel = 'Spot size ({})'.format(runits)
+        ax.set_ylabel(ylabel)
+        # ax.legend()
+
+        if show_axis:
+            ax.set_ylim(bottom=0)
+        ax.set_autoscaley_on(False)
+
+        # Pad out names and convert to a list
+        names = [names[i] if i < len(names) else '' for i in range(len(zs_mag))]
+
+        if cyclical and names:
+            zs_mag.append(zs_mag[-1][-1:])
+            names.append(names[0])
+            profs_t_mag.append(profs_t_mag[0])
+            profs_s_mag.append(profs_s_mag[0])
+
+        # Plot boundary lines and names (if provided)
+        for z_mag, prof_t_mag, prof_s_mag, name in zip(zs_mag, profs_t_mag,
+                                                       profs_s_mag, names):
+            ax.vlines([z_mag[0]], ax.get_ylim()[0], ax.get_ylim()[1],
+                      linestyle='dashed', linewidth=2, color=(.5, .5, .5),
+                      antialiased=True)
+
+            # Get relevant y boundaries
+            ylim0, ylim1 = ax.get_ylim()
+            if prof_t_mag[0] < prof_s_mag[0]:
+                pmin, pmax = prof_t_mag[0], prof_s_mag[0]
+            else:
+                pmin, pmax = prof_s_mag[0], prof_t_mag[0]
+
+            region = np.argmax([pmin-ylim0, pmax-pmin, ylim1-pmax])
+            if region == 0:
+                margin = ylim0
+                va = 'bottom'
+            elif region == 1:
+                margin = pmin + (pmax-pmin)*0.5
+                va = 'center'
+            else:
+                margin = ylim1 - (ylim1-pmax)*0.2
+                va = 'top'
+            if name:
+                ax.text(z_mag[0], margin, name, rotation='vertical', ha='center',
+                        va=va, size='xx-large', backgroundcolor='w')
