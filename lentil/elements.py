@@ -70,8 +70,8 @@ class ABCD(object):
             return ABCD(self.A*other, self.B*other, self.C*other, self.D*other)
         return NotImplemented
 
-    def _stringify(self, q):
-        s = str(q)
+    def _stringify(self, quantity):
+        s = '{:.2f}'.format(quantity)
         s = s.replace('dimensionless', '')
         s = s.replace('millimeter', 'mm')
         s = s.replace('radian', 'rad')
@@ -127,7 +127,7 @@ class OpticalElement(object):
         return OpticalElement(tan, sag)
 
     def __repr__(self):
-        return "<{} z={}>".format(self.__class__.__name__, self.z)
+        return "<{} z={:~.1f}>".format(self.__class__.__name__, self.z)
 
     def tan(self, n1, n2):
         """The ABCD matrix for a tangential beam, given left and right refractive indices"""
