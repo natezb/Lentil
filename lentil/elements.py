@@ -175,24 +175,8 @@ class IdentityABCD(ABCD):
         ABCD.__init__(self, 1, 0, 0, 1)
 
 
-class Space(OpticalElement):
-    """A space between other optical elements"""
-    def __init__(self, z, d, n=1):
-        """
-        Parameters
-        ----------
-        d : Quantity or str
-            The axial length of the space
-        n : number, optional
-            The index of refraction of the medium. Defaults to 1 for vacuum.
-        """
-        OpticalElement.__init__(self, z)
-        self.d = d
-        self.n = n
-        self._tan = self._sag = SpaceABCD(d, n)
-
-
 class SpaceABCD(ABCD):
+    # FIXME: Should we not divide by n because of our BeamParam convention?
     def __init__(self, d, n=1):
         d = ensure_units(d, 'mm/rad')
         ABCD.__init__(self, 1, d/n, 0, 1)
