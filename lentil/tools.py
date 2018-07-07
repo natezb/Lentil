@@ -125,7 +125,7 @@ class BeamParam(object):
             z0_sign = +1
         elif focus_location == 'between':
             zR_sign = -1
-            z0_sign = -1 if z1 < z2 else +1
+            z0_sign = +1 if z1 < z2 else -1
         else:
             raise ValueError
         # NOTE: wavlen should be wavlen in medium
