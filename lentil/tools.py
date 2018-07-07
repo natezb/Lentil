@@ -11,6 +11,10 @@ from .elements import OpticalElement, Identity, SpaceABCD, ensure_units
 from .util import u, Q_, pairwise, unitful_linspace, argrelmin
 
 
+def modsq(z):
+    return z.real**2 + z.imag**2
+
+
 def _get_real(q):
     """Temporary hack to add units to `real`"""
     return Q_(q.magnitude.real, q.units)
@@ -603,6 +607,46 @@ class BeamPath(object):
             if name:
                 ax.text(z_mag[0], margin, name, rotation='vertical', ha='center',
                         va=va, size='xx-large', backgroundcolor='w')
+
+
+# FIXME: Rename this
+def path_info(elems, ns, z_start=None, z_end=None, add_spaces=False):
+    """Get all (zs, Ms_tan, Ms_sag, n_pairs) within this path"""
+    if len(ns) != len(elems) + 1:
+        raise ValueError('Need n+1 indices for n optical elements')
+
+    # Consider *always* adding Identity elements, so we have at least 2 elements
+    # Make sure not to modify elems or ns in place
+    if z_start is not None:
+        elems = [Identity(z_start)] + elems
+        ns = [ns[0]] + ns
+    if z_end is not None:
+        elems = elems + [Identity(z_end)]
+        ns = ns + [ns[-1]]
+
+    ## Kinda ugly, but clearer than using itertools
+    #lists = ([], [], [], [])
+    #for el, (n1, n2) in zip(elems, pairwise(ns)):
+    #    for list_, values in zip(lists, el.path_info(n1, n2)):
+    #        list_.extend(values)
+
+    info = chain.from_iterable(el.path_info(n1, n2)
+                               for el, (n1,n2) in zip(elems, pairwise(ns)))
+    if add_spaces:
+        old_info, info = info, []
+        tup1 = next(old_info)
+        info.append(tup1)
+        for tup2 in old_info:
+            z1, _, _, (n1a, n1b) = tup1
+            z2, _, _, (n2a, n2b) = tup2
+            M = SpaceABCD(z2-z1, n=n1b)
+            info.append((z1, M, M, (n1b, n1b)))
+            info.append(tup2)
+            tup1 = tup2
+
+    return zip(*info)  # (zs, Ms_tan, Ms_sag, n_pairs)
+
+
 @listify
 def zipper(*seqs):
     """Flatten seqs by intercalating them"""
@@ -616,5 +660,9 @@ def zipper(*seqs):
         else:
             iter_queue.append(it)
             yield item
+
+
+def combine(Ms):
+    return reduce(lambda x, y: y*x, Ms)
 
 
