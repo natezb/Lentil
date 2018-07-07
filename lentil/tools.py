@@ -354,12 +354,12 @@ def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clippi
         #M = (el.sag if orientation == 'sagittal' else el.tan)(n1, n2)
 
         for z_M, M, (n1_M, n2_M) in zip(el_zs, el_Ms, el_n_pairs):
-            q = q.apply_ABCD(M, z_M)
+            q = q.apply_ABCD(M, z_M, n2=el.n)
 
             # Calculate beam info within region
             z = unitful_linspace(el.z, next_el.z, 1000)
             zs.append(z)
-            profiles.append(q.profile(z, el.n, clipping))
+            profiles.append(q.profile(z, clipping))
             RoCs.append(q.roc(z))
 
     return zs, profiles, RoCs
