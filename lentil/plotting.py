@@ -3,7 +3,8 @@
 
 import numpy as np
 from matplotlib.pyplot import subplots
-from .tools import *
+from .tools import get_profiles
+from .util import argrelmin
 
 
 def _flatten_list_of_lists(li):
@@ -11,23 +12,6 @@ def _flatten_list_of_lists(li):
     for el in li:
         flattened.extend(el)
     return flattened
-
-
-def _argrelmin(data):
-    """ Finds indices of relative minima. Doesn't count first and last points
-    as minima """
-    args = []
-    curmin = data[0]  # This keeps the first point from being included
-    curminarg = None
-    for i, num in enumerate(data):
-        if num < curmin:
-            curmin = num
-            curminarg = i
-        elif num > curmin and curminarg is not None:
-            # Once curve starts going up, we know we've found a minimum
-            args.append(curminarg)
-            curminarg = None
-    return args
 
 
 def _magify(outer, units):
@@ -106,8 +90,8 @@ def plot_profile(q_start_t, q_start_s, elems, z_start=None, z_end=None,
     if show_waists:
         # Mark waists
         # Should use scipy.signal.argrelextrema, but it's not available before 0.11
-        t_waist_indices = _argrelmin(prof_t_mag)
-        s_waist_indices = _argrelmin(prof_s_mag)
+        t_waist_indices = argrelmin(prof_t_mag)
+        s_waist_indices = argrelmin(prof_s_mag)
         for i in t_waist_indices:
             ax.annotate('{:.3f} {}'.format(prof_t_mag[i], runits),
                         (z_mag[i], prof_t_mag[i]),
