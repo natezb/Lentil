@@ -241,7 +241,7 @@ def _find_cavity_mode(M):
     return q_r
 
 
-def find_cavity_modes(elems):
+def find_cavity_modes(elems, wavlen, n=1):
     """
     Find the eigenmodes of an optical cavity.
 
@@ -252,13 +252,25 @@ def find_cavity_modes(elems):
 
     Returns
     -------
-    qt_r, qs_r : complex Quantity objects
-        1/q for the tangential and sagittal modes, respectively. Has
-        units of 1/[length].
+    qt, qs : BeamParams
+        beam parameter for the tangential and sagittal modes, respectively.
     """
-    qt_r = _find_cavity_mode(reduce(lambda x, y: y*x, [el.tan for el in elems]))
-    qs_r = _find_cavity_mode(reduce(lambda x, y: y*x, [el.sag for el in elems]))
-    return qt_r, qs_r
+    wavlen = Q_(wavlen).to('nm')
+    tans, sags = [], []
+    elems, ns = _get_element_indices(elems, n)
+
+    el, n1 = elems.pop(0), n
+    for next_el, n2 in zip(elems, ns):
+        sags.append(el.sag(n1, n2))
+        tans.append(el.tan(n1, n2))
+        el, n1 = next_el, n2
+
+    qt_r = _find_cavity_mode(reduce(lambda x, y: y*x, tans))
+    qs_r = _find_cavity_mode(reduce(lambda x, y: y*x, sags))
+
+    qt = BeamParam.from_q(1/qt_r, wavlen=wavlen, n=n)
+    qs = BeamParam.from_q(1/qs_r, wavlen=wavlen, n=n)
+    return qt, qs
 
 
 def _get_element_indices(elements, n):
