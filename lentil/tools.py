@@ -28,7 +28,7 @@ def _get_imag(q):
 class BeamParam(object):
     """An object representing a reduced complex beam parameter
 
-    Uses Siegman's convention of q-hat, i.e. q is 'reduced' by n.
+    Uses Siegman's convention of q-tilde, i.e. q is *not* 'reduced' by n (pp. 784).
     """
     def __init__(self, wavlen, zR, z0, n=1):
         """
