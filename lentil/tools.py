@@ -29,7 +29,7 @@ class BeamParam(object):
         Parameters
         ----------
         wavlen : Quantity([Length])
-          The wavelength of the beam in this medium
+          The wavelength of the beam in the medium given by `n` (vacuum by default)
         zR : Quantity([Length])
           The Rayleigh range
         z0 : Quantity([Length])
@@ -49,6 +49,12 @@ class BeamParam(object):
 
     @classmethod
     def from_q(cls, q, wavlen, z='0mm', n=1):
+        """
+        Parameters
+        ----------
+        q : Quantity([Length])
+          The complex beam parameter.
+        """
         z = Q_(z).to('mm')
         zR = _get_imag(q)
         z0 = z - _get_real(q)
@@ -56,6 +62,18 @@ class BeamParam(object):
 
     @classmethod
     def from_waist(cls, wavlen, w0, z0='0mm', n=1):
+        """
+        Parameters
+        ----------
+        wavlen : Quantity([Length])
+          The wavelength of the beam in the medium given by `n`
+        w0 : Quantity([Length])
+          The waist (radius) of the beam in the medium given by `n`
+        z0 : Quantity([Length])
+          The z-position of the focus
+        n : int or float
+          The refractive index where the beam parameter is being defined
+        """
         wavlen = Q_(wavlen).to('nm')
         w0 = Q_(w0).to('mm')
         z0 = Q_(z0).to('mm')
@@ -64,6 +82,20 @@ class BeamParam(object):
 
     @classmethod
     def from_widths(cls, wavlen, z1, w1, z2, w2, n=1, focus_location='left'):
+        """
+        Parameters
+        ----------
+        wavlen : Quantity([Length])
+          The wavelength of the beam in the medium given by `n`
+        z1, z2 : Quantity([Length])
+          The z-position of each measured width.
+        w1, w2 : Quantity([Length])
+          The measured beam widths (radii)
+        n : int or float
+          The refractive index in which both measurements were made.
+        focus_location : str
+          One of 'infer', 'left', 'right', and 'between'
+        """
         wavlen = Q_(wavlen).to('nm')
         z1 = Q_(z1).to('mm')
         z2 = Q_(z2).to('mm')
@@ -105,7 +137,7 @@ class BeamParam(object):
         return sqrt((self.lambda0 * self.zR) / (self.n * pi)).to('mm')
 
     def q(self, z):
-        """Value of q at z"""
+        """Value of the complex number q when evaluated at z"""
         return self.q0 + z
 
     def profile(self, z, n=1, clipping=None):
