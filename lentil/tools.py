@@ -435,3 +435,18 @@ class BeamPath(object):
             if name:
                 ax.text(z_mag[0], margin, name, rotation='vertical', ha='center',
                         va=va, size='xx-large', backgroundcolor='w')
+@listify
+def zipper(*seqs):
+    """Flatten seqs by intercalating them"""
+    iter_queue = deque(iter(seq) for seq in seqs)
+    while iter_queue:
+        it = iter_queue.popleft()
+        try:
+            item = next(it)
+        except StopIteration:
+            pass
+        else:
+            iter_queue.append(it)
+            yield item
+
+
