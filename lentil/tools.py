@@ -156,14 +156,14 @@ class BeamParam(object):
         z = ensure_units(z, 'mm')
         return self.q0 + z
 
-    def profile(self, z, n=1, clipping=None):
+    def profile(self, z, clipping=None):
         z = ensure_units(z, 'mm')
 
         scale = 1
         if clipping is not None:
             scale = -erfinv(2*clipping - 1)/sqrt(2)
 
-        return scale * self.waist(n) * sqrt(1 + ((z-self.z0)/self.zR)**2)
+        return scale * self.w0 * sqrt(1 + ((z-self.z0)/self.zR)**2)
 
     def roc(self, z):
         z = Q_(z).to('mm')
