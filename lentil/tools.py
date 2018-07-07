@@ -178,6 +178,36 @@ class BeamParam(object):
 
         return R
 
+    def u(self, r, z):
+        """Normalized amplitude u(r,z), without axial phase term.
+
+        Because of the missing axial phase term, the phase at r=0 is zero.
+        """
+        wz = self.profile(z)
+        axial_amp = 1 / wz
+        radial_amp = exp(-(r/wz)**2)
+        radial_phase = exp(-1j*pi*r**2 * self.n/(self.lambda0*self.roc(z)))
+        return sqrt(2/pi) * axial_amp * radial_amp * radial_phase
+
+    def mode_overlap(self, other, z, check=True):
+        """The integrated mode overlap of two beams at a given z position"""
+        if check:
+            if self.lambda0 != other.lambda0:
+                raise ValueError('BeamParam wavelengths differ: {} != {}'.format(self.lambda0,
+                                                                                 other.lambda0))
+            if self.n != other.n:
+                raise ValueError("BeamParam n's differ: {} != {}".format(self.n, other.n))
+
+        z = ensure_units(z, 'mm')
+        w0 = min(self.w0, other.w0)  # Most overlap fits in smaller beam
+        r = unitful_linspace('0mm', 10*w0, 1000)
+        u1 = self.u(r, z)
+        u2 = other.u(r, z)
+        # u's are normalized, so we don't have to divide by their self-overlaps
+        integrand = (2*pi*r * np.conj(u1) * u2).m_as('1/mm')
+        r_mm = r.m_as('mm')
+        return modsq(np.trapz(integrand, r_mm))
+
     def apply_ABCD(self, M, z, n2=None):
         """Return a new BeamParam resulting from applying an ABCD matrix M."""
         z = Q_(z).to('mm')
