@@ -43,6 +43,10 @@ class BeamParam(object):
         zR = Q_(zR).to('mm')
         self.q0 = -z0 + 1j * zR  # q(z=0)
 
+    def __repr__(self):
+        return ('<BeamParam w0={:~.3f}, z0={:~.3f}, n={:.3f}>'
+                ''.format(self.w0, self.z0, float(self.n)))
+
     @classmethod
     def from_q(cls, q, wavlen, z='0mm', n=1):
         z = Q_(z).to('mm')
