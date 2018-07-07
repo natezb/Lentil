@@ -223,10 +223,17 @@ def _find_cavity_mode(M):
     # From Siegman: Lasers, Chapter 21.1
     term1 = (D-A)/(2*B)
     term2 = 1/B*sqrt(complex(((A+D)/2)**2 - 1))
-    sgn = sign(_get_imag(term2))
 
     # Choose transversely confined solution
-    q_r = term1 - sgn*term2
+    q_r_a = term1 - term2
+    q_r_b = term1 + term2
+
+    if _get_imag(q_r_a).m < 0:
+        q_r = q_r_a
+    elif _get_imag(q_r_b).m < 0:
+        q_r = q_r_b
+    else:
+        raise Exception('No confined solution')
 
     # Check stability to perturbation
     if ((A+D)/2)**2 > 1:
