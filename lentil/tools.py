@@ -371,6 +371,24 @@ def listify(gen_func):
     return func
 
 
+def extract_elems_ns(elems_and_ns, n=1.):
+    elems = []
+    ns = [n]
+    z = None
+    for item in elems_and_ns:
+        if isinstance(item, OpticalElement):
+            if z is not None and item.z < z:
+                raise ValueError('Elements are not z-sorted')
+            z = item.z
+            elems.append(item)
+            ns.append(n)
+        else:
+            # Update previous n
+            n = float(item)
+            ns[-1] = n
+    return elems, ns
+
+
 class BeamPath(object):
     def __init__(self, elements):
         """A beam path to propagate through.
