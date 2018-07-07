@@ -246,6 +246,24 @@ class BeamParam(object):
 
 
 
+def mode_match(qa, qb, z, lenses):
+    """Calculate optimized mode matching using the given lenses"""
+    z_test = ensure_units(z, 'mm')
+    lenses = lenses[:]
+    def cost_func(zs):
+        for lens, z in zip(lenses, zs):
+            lens.z = Q_(z, 'mm')
+        q = qa.apply_optical_elements(lenses)
+        return -q.mode_overlap(qb, z_test)
+    z0 = [lens.z.m_as('mm') for lens in lenses]
+    result = minimize(cost_func, z0)
+
+    if not result.success:
+        raise ValueError('Minimization failed: {}'.format(result.message))
+
+    return lenses
+
+
 def _find_cavity_mode(M):
     """
     Returns 1/q for a cavity eigenmode given the effective cavity matrix M.
