@@ -365,6 +365,12 @@ def get_profiles(q, orientation, elements, z_start=None, z_end=None, n=1, clippi
     return zs, profiles, RoCs
 
 
+def listify(gen_func):
+    def func(*args, **kwds):
+        return list(gen_func(*args, **kwds))
+    return func
+
+
 class BeamPath(object):
     def __init__(self, elements):
         """A beam path to propagate through.
