@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 # Copyright 2013-2018 Nate Bogdanowicz
 import numpy as np
+from itertools import chain
+from collections import deque
 from functools import reduce
-from numpy import sqrt, complex, sign, pi
+from numpy import sqrt, complex, pi, exp
 from scipy.special import erfinv
-from .elements import OpticalElement, Identity
-from .util import Q_, pairwise, unitful_linspace
+from scipy.optimize import minimize
+from .elements import OpticalElement, Identity, SpaceABCD, ensure_units
 from .util import u, Q_, pairwise, unitful_linspace, argrelmin
 
 
