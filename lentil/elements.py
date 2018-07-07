@@ -235,14 +235,10 @@ class MirrorABCD(ABCD):
 
 class Interface(OpticalElement):
     """An interface between media with different refractive indices"""
-    def __init__(self, z, n1, n2, R=None, aoi=None, aot=None):
+    def __init__(self, z, R=None, aoi=None, aot=None):
         """
         Parameters
         ----------
-        n1 : number
-            The refractive index of the initial material
-        n2 : number
-            The refractive index of the final material
         R : Quantity or str, optional
             The radius of curvature of the interface's spherical surface, in
             units of length. Defaults to `None`, indicating a flat interface.
@@ -266,11 +262,11 @@ class Interface(OpticalElement):
                 a2 = Q_(0)
             else:
                 a2 = _parse_angle(aot)
-                a1 = arcsin(n2/n1*sin(a2))
+                a1 = None  # Calculate when given n's
         else:
             if aot is None:
                 a1 = _parse_angle(aoi)
-                a2 = arcsin(n1/n2*sin(a1))
+                a2 = None  # Calculate when given n's
             else:
                 raise Exception("Cannot specify both aoi and aot")
 
@@ -281,8 +277,12 @@ class Interface(OpticalElement):
 class InterfaceABCD(ABCD):
     def __init__(self, n1, n2, R, a1, a2, orientation):
         R = ensure_units(R or Q_(float('inf'), 'mm'), 'mm')
+        if a1 is None:
+            a1 = arcsin(n2/n1*sin(a2))
+        if a2 is None:
+            a2 = arcsin(n1/n2*sin(a1))
         if orientation == 'tangential':
-            dne = (n2 * cos(a2) - n1 * cos(a2)) / (cos(a1) * cos(a2))
+            dne = (n2 * cos(a2) - n1 * cos(a1)) / (cos(a1) * cos(a2))
             ABCD.__init__(self, cos(a2)/cos(a1), 0, dne/R, cos(a1)/cos(a2))
         else:
             dne = n2 * cos(a2) - n1 * cos(a1)
