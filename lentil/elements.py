@@ -37,6 +37,8 @@ class ABCD(object):
             [A B]
             [C D]
 
+        Each matrix should be defined using Siegman's convention.
+
         Parameters
         ----------
         A,B,C,D : Quantity objects
