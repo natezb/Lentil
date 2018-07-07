@@ -223,6 +223,20 @@ class LensABCD(ABCD):
         ABCD.__init__(self, 1, 0, -1/f, 1)
 
 
+class CylindricalLens(OpticalElement):
+    """A thin cylindrical lens"""
+    def __init__(self, z, f, orientation):
+        OpticalElement.__init__(self, z)
+        if orientation == 'tangential':
+            self._tan = LensABCD(f)
+            self._sag = IdentityABCD()
+        elif orientation == 'sagittal':
+            self._tan = IdentityABCD()
+            self._sag = LensABCD(f)
+        else:
+            raise ValueError("orientation must be 'tangential' or 'sagittal'")
+
+
 class Mirror(OpticalElement):
     """A mirror, possibly curved"""
     def __init__(self, z, R=None, aoi=0):
