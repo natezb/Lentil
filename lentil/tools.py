@@ -153,10 +153,11 @@ class BeamParam(object):
 
     def q(self, z):
         """Value of the complex number q when evaluated at z"""
+        z = ensure_units(z, 'mm')
         return self.q0 + z
 
     def profile(self, z, n=1, clipping=None):
-        z = Q_(z).to('mm')
+        z = ensure_units(z, 'mm')
 
         scale = 1
         if clipping is not None:
