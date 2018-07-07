@@ -37,7 +37,8 @@ class BeamParam(object):
         n : int or float
           The refractive index where the beam parameter is being defined
         """
-        self.wavlen = Q_(wavlen).to('nm')
+        self.lambda0 = Q_(wavlen).to('nm') * n
+        self.n = n
         z0 = Q_(z0).to('mm')
         zR = Q_(zR).to('mm')
         self.q0 = -z0 + 1j * zR  # q(z=0)
@@ -96,12 +97,8 @@ class BeamParam(object):
 
     @property
     def w0(self):
-        """Waist size of the beam"""
-        return self.waist()
-
-    def waist(self, n=1):
-        """Waist size of the beam. Allows you to specify refractive index n."""
-        return sqrt((self.wavlen * self.zR) / (n * pi))
+        """Waist size (radius) of the beam"""
+        return sqrt((self.lambda0 * self.zR) / (self.n * pi)).to('mm')
 
     def q(self, z):
         """Value of q at z"""
@@ -129,14 +126,40 @@ class BeamParam(object):
 
         return R
 
-    def apply_ABCD(self, M, z, wavlen=None):
+    def apply_ABCD(self, M, z, n2=None):
         """Return a new BeamParam resulting from applying an ABCD matrix M."""
         z = Q_(z).to('mm')
-        wavlen = wavlen or self.wavlen
+        n1 = self.n
+        n2 = n2 or n1
+        lambda2 = self.lambda0 / n2
         A, B, C, D = M.elems()
-        q = self.q(z)
-        q_new = (A*q + B) / (C*q + D)
-        return BeamParam(wavlen, z0=(z-_get_real(q_new)), zR=_get_imag(q_new))
+        q1 = self.q(z)
+        q2 = n2 * (A*q1/n1 + B) / (C*q1/n1 + D)
+        return BeamParam(lambda2, z0=(z-_get_real(q2)), zR=_get_imag(q2), n=n2)
+
+    def unapply_ABCD(self, M, z, n1=None):
+        # FIXME: add in factors of n1, n2
+        z = Q_(z).to('mm')
+        n2 = self.n
+        n1 = n1 or n2
+        lambda1 = self.lambda0 / n1
+        A, B, C, D = M.elems()
+        q2 = self.q(z)
+        q1 = n1 * (D*q2/n2 - B) / (-C*q2/n2 + A)
+        return BeamParam.from_q(q1, z=z, wavlen=lambda1, n=n1)
+
+    def apply_optical_elements(self, elems, tangential=True, wavlen=None, n=1):
+        """Make a new BeamParam by passing this BeamParam through a list of optical elements"""
+        elems, ns = extract_elems_ns(elems, n)
+        zs, Ms_tan, Ms_sag, n_pairs = path_info(elems, ns)
+        Ms = Ms_tan if tangential else Ms_sag
+        q = self
+        for M, z_M, (n1, n2) in zip(Ms, zs, n_pairs):
+            q = q.apply_ABCD(M, z_M, n2=n2)
+
+        return q
+
+
 
 
 def _find_cavity_mode(M):
