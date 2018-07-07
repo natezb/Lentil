@@ -81,7 +81,7 @@ class BeamParam(object):
         return BeamParam(wavlen, zR, z0, n)
 
     @classmethod
-    def from_widths(cls, wavlen, z1, w1, z2, w2, n=1, focus_location='left'):
+    def from_widths(cls, wavlen, z1, w1, z2, w2, n=1, focus_location='infer'):
         """
         Parameters
         ----------
@@ -102,10 +102,25 @@ class BeamParam(object):
         w1 = Q_(w1).to('mm')
         w2 = Q_(w2).to('mm')
 
+        if z1 < z2:
+            z_left, z_right = z1, z2
+            w_left, w_right = w1, w2
+        else:
+            z_left, z_right = z2, z1
+            w_left, w_right = w2, w1
+
+        if focus_location == 'infer':
+            focus_location = 'left' if w_left <= w_right else 'right'
+
         if focus_location == 'left':
+            if w_left > w_right:
+                raise ValueError('Focus cannot be to the left; left spot is larger than right spot')
             zR_sign = +1
             z0_sign = -1
         elif focus_location == 'right':
+            if w_right > w_left:
+                raise ValueError('Focus cannot be to the right; right spot is larger than left '
+                                 'spot')
             zR_sign = +1
             z0_sign = +1
         elif focus_location == 'between':
