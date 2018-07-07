@@ -20,7 +20,7 @@ def _magify(outer, units):
 
 def plot_profile(q_start_t, q_start_s, elems, z_start=None, z_end=None,
                  cyclical=False, names=tuple(), clipping=None, show_axis=False,
-                 show_waists=False, zeroat=0, zunits='mm', runits='um'):
+                 show_waists=False, zeroat=0, zunits='mm', runits='um', ax=None, **kwds):
     """
     Plot tangential and sagittal beam profiles.
 
@@ -67,7 +67,13 @@ def plot_profile(q_start_t, q_start_s, elems, z_start=None, z_end=None,
     """
     zs, profs_t, RoCs = get_profiles(q_start_t, 'tangential', elems, z_start, z_end, 1, clipping)
     zs, profs_s, RoCs = get_profiles(q_start_s, 'sagittal', elems, z_start, z_end, 1, clipping)
+    return _plot_profile(zs, profs_t, profs_s, RoCs, cyclical, names, clipping, show_axis,
+                         show_waists, zeroat, zunits, runits, ax, **kwds)
 
+
+def _plot_profile(zs, profs_t, profs_s, RoCs, cyclical=False, names=tuple(), clipping=None,
+                  show_axis=False, show_waists=False, zeroat=0, zunits='mm', runits='um', ax=None,
+                  **kwds):
     # Convert lists of Quantity-arrays
     zs_mag = _magify(zs, zunits)
     profs_t_mag = _magify(profs_t, runits)
@@ -75,7 +81,8 @@ def plot_profile(q_start_t, q_start_s, elems, z_start=None, z_end=None,
     # RoC_mag = _magify(RoC, runits)
 
     fig_scale = 3
-    fig, ax = subplots(figsize=(4*fig_scale, 3*fig_scale))
+    if ax is None:
+        _, ax = subplots(figsize=(4*fig_scale, 3*fig_scale))
     margin = .0002e3
     ax.set_xlim([zs_mag[0][0]-margin, zs_mag[-1][-1]+margin])
 
@@ -84,8 +91,12 @@ def plot_profile(q_start_t, q_start_s, elems, z_start=None, z_end=None,
     prof_t_mag = np.concatenate(profs_t_mag)
     prof_s_mag = np.concatenate(profs_s_mag)
 
-    ax.plot(z_mag, prof_t_mag, color='b', label='Tangential beam', linewidth=3)
-    ax.plot(z_mag, prof_s_mag, color='r', label='Sagittal beam', linewidth=3)
+    t_kwds = dict(color='b', linewidth=3)
+    t_kwds.update(kwds)
+    s_kwds = dict(color='r', linewidth=3)
+    s_kwds.update(kwds)
+    ax.plot(z_mag, prof_t_mag, label='Tangential beam', **t_kwds)
+    ax.plot(z_mag, prof_s_mag, label='Sagittal beam', **s_kwds)
 
     if show_waists:
         # Mark waists
