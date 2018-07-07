@@ -18,7 +18,7 @@ def pairwise(seq):
     """Produce a sequence of adjacent pairs from the input sequence"""
     a, b = itertools.tee(seq)
     next(b, None)
-    return izip(a, b)
+    return tuple(izip(a, b))
 
 
 def unitful_linspace(start, stop, *args, **kwds):
