@@ -2,7 +2,7 @@
 # Copyright 2013-2018 Nate Bogdanowicz
 from numbers import Number
 from numpy import cos, sin, arcsin
-from .util import Q_, pairwise, unitful_linspace
+from .util import Q_, pairwise
 
 
 def _parse_angle(ang):
