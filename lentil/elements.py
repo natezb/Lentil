@@ -116,6 +116,19 @@ class OpticalElement(object):
         self.n = 1
         self.z = ensure_units(z, 'mm')
 
+        # For compound elements
+        self.dz = Q_(0, 'mm')
+        self.elems = [self]
+        self.ns = []
+
+    @property
+    def z_left(self):
+        return self.elems[0].z
+
+    @property
+    def z_right(self):
+        return self.elems[-1].z
+
     def __mul__(self, other):
         tan = self.tan * other.tan
         sag = self.sag * other.sag
@@ -137,28 +150,37 @@ class OpticalElement(object):
         """The ABCD matrix for a sagittal beam, given left and right refractive indices"""
         return self._sag(n1, n2) if callable(self._sag) else self._sag
 
-    def tan_list(self, n1, n2):
-        # Default implementation
-        zs = [self.z]
-        Ms = [self.tan(n1, n2)]
-        ns = [n1, n2]
-        return zs, Ms, pairwise(ns)
+    def path_info(self, n1, n2):
+        """list of tuples (zs, M_tan, M_sag, (n1,n2)) for each internal ABCD matrix"""
+        return list(self._gen_path_info(n1, n2))
+
+    def _gen_path_info(self, n1, n2):
+        n_pairs = pairwise([n1] + self.ns + [n2])
+        for el, (na, nb) in zip(self.elems, n_pairs):
+            yield (el.z, el.tan(na,nb), el.sag(na,nb), (na, nb))
 
 
 class FlatSlab(OpticalElement):
-    def __init__(self, z, dz, n):
+    def __init__(self, z, d, n, aot=None):
+        """
+        Parameters
+        ----------
+        d : Quantity([Length])
+          Thickness of the slab, measured normal to the flats. If `aot` is nonzero, the optical path
+          length will be greater than this.
+        """
         OpticalElement.__init__(self, z)
-        self.dz = ensure_units(dz, 'mm')
-        self.n = n
+        d = ensure_units(d, 'mm')
+        if aot:
+            aot = _parse_angle(aot)
+            self.dz = d / cos(aot)
+        else:
+            self.dz = d
 
-        self.left = Interface(self.z, None, None)
-        self.right = Interface(self.z+self.dz, None, None)
-
-    def tan_list(self, n1, n2):
-        zs = [self.left.z, self.right.z]
-        Ms = [self.left.tan(n1, self.n), self.right.tan(self.n, n2)]
-        ns = [n1, self.n, n2]
-        return zs, Ms, pairwise(ns)
+        self.left = Interface(self.z, None, aot=aot)
+        self.right = Interface(self.z+self.dz, None, aot=aot)
+        self.elems = [self.left, self.right]
+        self.ns = [n]
 
 
 class Identity(OpticalElement):
