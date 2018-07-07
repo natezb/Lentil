@@ -535,9 +535,9 @@ class BeamPath(object):
         prof_t_mag = np.concatenate(profs_t_mag)
         prof_s_mag = np.concatenate(profs_s_mag)
 
-        t_kwds = dict(color='b', linewidth=3)
+        t_kwds = dict(color='b', linewidth=1.5)
         t_kwds.update(kwds)
-        s_kwds = dict(color='r', linewidth=3)
+        s_kwds = dict(color='r', linewidth=1.5)
         s_kwds.update(kwds)
         ax.plot(z_mag, prof_t_mag, label='Tangential beam', **t_kwds)
         ax.plot(z_mag, prof_s_mag, label='Sagittal beam', **s_kwds)
