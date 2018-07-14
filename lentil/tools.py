@@ -30,12 +30,12 @@ class BeamParam(object):
 
     Uses Siegman's convention of q-tilde, i.e. q is *not* 'reduced' by n (pp. 784).
     """
-    def __init__(self, wavlen, zR, z0, n=1):
+    def __init__(self, lambda0, zR, z0, n=1):
         """
         Parameters
         ----------
-        wavlen : Quantity([Length])
-          The wavelength of the beam in the medium given by `n` (vacuum by default)
+        lambda0 : Quantity([Length])
+          The vacuum wavelength of the beam
         zR : Quantity([Length])
           The Rayleigh range
         z0 : Quantity([Length])
@@ -43,7 +43,7 @@ class BeamParam(object):
         n : int or float
           The refractive index where the beam parameter is being defined
         """
-        self.lambda0 = Q_(wavlen).to('nm') * n
+        self.lambda0 = Q_(lambda0).to('nm')
         self.n = n
         z0 = Q_(z0).to('mm')
         zR = Q_(zR).to('mm')
@@ -54,7 +54,7 @@ class BeamParam(object):
                 ''.format(self.w0, self.z0, float(self.n)))
 
     @classmethod
-    def from_q(cls, q, wavlen, z='0mm', n=1):
+    def from_q(cls, q, lambda0, z='0mm', n=1):
         """
         Parameters
         ----------
@@ -64,35 +64,35 @@ class BeamParam(object):
         z = Q_(z).to('mm')
         zR = _get_imag(q)
         z0 = z - _get_real(q)
-        return BeamParam(wavlen, zR, z0, n)
+        return BeamParam(lambda0, zR, z0, n)
 
     @classmethod
-    def from_waist(cls, wavlen, w0, z0='0mm', n=1):
+    def from_waist(cls, lambda0, w0, z0='0mm', n=1):
         """
         Parameters
         ----------
-        wavlen : Quantity([Length])
-          The wavelength of the beam in the medium given by `n`
+        lambda0 : Quantity([Length])
+          The vacuum wavelength of the beam
         w0 : Quantity([Length])
-          The waist (radius) of the beam in the medium given by `n`
+          The waist (radius) of the beam *in the medium given by `n`*
         z0 : Quantity([Length])
           The z-position of the focus
         n : int or float
           The refractive index where the beam parameter is being defined
         """
-        wavlen = Q_(wavlen).to('nm')
+        lambda0 = Q_(lambda0).to('nm')
         w0 = Q_(w0).to('mm')
         z0 = Q_(z0).to('mm')
-        zR = pi * w0**2 / wavlen
-        return BeamParam(wavlen, zR, z0, n)
+        zR = pi * w0**2 * n / lambda0
+        return BeamParam(lambda0, zR, z0, n)
 
     @classmethod
-    def from_widths(cls, wavlen, z1, w1, z2, w2, n=1, focus_location='infer'):
+    def from_widths(cls, lambda0, z1, w1, z2, w2, n=1, focus_location='infer'):
         """
         Parameters
         ----------
-        wavlen : Quantity([Length])
-          The wavelength of the beam in the medium given by `n`
+        lambda0 : Quantity([Length])
+          The vacuum wavelength of the beam
         z1, z2 : Quantity([Length])
           The z-position of each measured width.
         w1, w2 : Quantity([Length])
@@ -102,7 +102,7 @@ class BeamParam(object):
         focus_location : str
           One of 'infer', 'left', 'right', and 'between'
         """
-        wavlen = Q_(wavlen).to('nm')
+        lambda0 = Q_(lambda0).to('nm')
         z1 = Q_(z1).to('mm')
         z2 = Q_(z2).to('mm')
         w1 = Q_(w1).to('mm')
@@ -136,11 +136,12 @@ class BeamParam(object):
             raise ValueError
         # NOTE: wavlen should be wavlen in medium
         # zR expression derived using Wolfram Cloud
+        wavlen = lambda0 / n
         zR_num = (w1**2 + w2**2) + zR_sign * 2*sqrt(w1**2*w2**2 - ((wavlen/pi*(z1-z2))**2))
         zR_den = pi/wavlen*((w1**2-w2**2)/(z1-z2))**2 + 4*wavlen/pi
         zR = zR_num/zR_den
         z0 = z1 + z0_sign * sqrt(zR * (pi/wavlen*w1**2 - zR))
-        return cls(wavlen, zR, z0)
+        return cls(lambda0, zR, z0, n=n)
 
     @property
     def zR(self):
@@ -230,13 +231,12 @@ class BeamParam(object):
         z = Q_(z).to('mm')
         n2 = self.n
         n1 = n1 or n2
-        lambda1 = self.lambda0 / n1
         A, B, C, D = M.elems()
         q2 = self.q(z)
         q1 = n1 * (D*q2/n2 - B) / (-C*q2/n2 + A)
-        return BeamParam.from_q(q1, z=z, wavlen=lambda1, n=n1)
+        return BeamParam.from_q(q1, z=z, lambda0=self.lambda0, n=n1)
 
-    def apply_optical_elements(self, elems, tangential=True, wavlen=None, n=1):
+    def apply_optical_elements(self, elems, tangential=True, n=1):
         """Make a new BeamParam by passing this BeamParam through a list of optical elements"""
         elems, ns = extract_elems_ns(elems, n)
         zs, Ms_tan, Ms_sag, n_pairs = path_info(elems, ns)
@@ -246,8 +246,6 @@ class BeamParam(object):
             q = q.apply_ABCD(M, z_M, n2=n2)
 
         return q
-
-
 
 
 def mode_match(qa, qb, z, lenses):
@@ -295,7 +293,7 @@ def _find_cavity_mode(M):
     return q_r
 
 
-def find_cavity_modes(elems, wavlen, n=1):
+def find_cavity_modes(elems, lambda0, n=1):
     """
     Find the eigenmodes of an optical cavity.
 
@@ -309,7 +307,7 @@ def find_cavity_modes(elems, wavlen, n=1):
     qt, qs : BeamParams
         beam parameter for the tangential and sagittal modes, respectively.
     """
-    wavlen = Q_(wavlen).to('nm')
+    lambda0 = Q_(lambda0).to('nm')
     tans, sags = [], []
     elems, ns = _get_element_indices(elems, n)
 
@@ -322,8 +320,8 @@ def find_cavity_modes(elems, wavlen, n=1):
     qt_r = _find_cavity_mode(reduce(lambda x, y: y*x, tans))
     qs_r = _find_cavity_mode(reduce(lambda x, y: y*x, sags))
 
-    qt = BeamParam.from_q(1/qt_r, wavlen=wavlen, n=n)
-    qs = BeamParam.from_q(1/qs_r, wavlen=wavlen, n=n)
+    qt = BeamParam.from_q(1/qt_r, lambda0=lambda0, n=n)
+    qs = BeamParam.from_q(1/qs_r, lambda0=lambda0, n=n)
     return qt, qs
 
 
@@ -477,15 +475,15 @@ class BeamPath(object):
             RoCs.append(q.roc(z))
         return all_zs, profiles, RoCs
 
-    def find_cavity_modes(self, wavlen, n=1, ring=True):
+    def find_cavity_modes(self, lambda0, n=1, ring=True):
         """Find the eigenmodes of an optical cavity defined by this BeamPath
 
         The first and last elements of this BeamPath should be mirrors.
 
         Parameters
         ----------
-        wavlen : Quantity([Length])
-          The wavelength of the beam in this medium
+        lambda0 : Quantity([Length])
+          The vacuum wavelength of the beam
         ring : bool
             If True, solve as a ring cavity. Otherwise, assumes the beam travels back through the
             optical elements, in a standing-wave configuration (like a Fabry-Perot cavity).
@@ -496,7 +494,7 @@ class BeamPath(object):
             beam parameter for the tangential and sagittal modes, respectively.
         """
         # FIXME: Verify we're doing the right thing regarding wavelengths and n's
-        wavlen = Q_(wavlen).to('nm')
+        lambda0 = Q_(lambda0).to('nm')
         zs, Ms_tan, Ms_sag, n_pairs = path_info(self.elems, self.ns, add_spaces=True)
 
         if not ring:
@@ -506,8 +504,8 @@ class BeamPath(object):
         qt_r = _find_cavity_mode(combine(Ms_tan))
         qs_r = _find_cavity_mode(combine(Ms_sag))
 
-        qt = BeamParam.from_q(1/qt_r, wavlen=wavlen, n=n, z=zs[0])
-        qs = BeamParam.from_q(1/qs_r, wavlen=wavlen, n=n, z=zs[0])
+        qt = BeamParam.from_q(1/qt_r, lambda0=lambda0, n=n, z=zs[0])
+        qs = BeamParam.from_q(1/qs_r, lambda0=lambda0, n=n, z=zs[0])
         return qt, qs
 
     def plot_profile(self, q_start_t, q_start_s, z_q=None, z_start=None, z_end=None, cyclical=False,
