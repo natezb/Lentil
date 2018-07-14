@@ -453,7 +453,7 @@ class BeamPath(object):
             pass
 
     def get_profiles(self, q, orientation, z_start=None, z_end=None, n=1, z_q=None, clipping=None):
-        zs, Ms_tan, Ms_sag, n_pairs = path_info(self.elems, self.ns, z_start, z_end)
+        zs, Ms_tan, Ms_sag, n_pairs = path_info(self.elems, self.ns, z_start, z_end, add_spaces=False)
         Ms = Ms_tan if orientation == 'tangential' else Ms_sag
 
         # TODO: Maybe make this more efficient
