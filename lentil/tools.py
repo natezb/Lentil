@@ -664,3 +664,179 @@ def combine(Ms):
     return reduce(lambda x, y: y*x, Ms)
 
 
+def insertion_index(xs, x):
+    """Find the index at which x should be inserted into xs to maintain sort order.
+
+    xs should already be sorted ascending.
+    """
+    for i, xi in enumerate(xs):
+        if xi > x:
+            return i
+    return i + 1
+
+
+inf = float('inf')
+
+
+class Beam(object):
+    def __init__(self, path, qx, qy, z_q=Q_(-inf, 'mm'), z_fixed=Q_(-inf, 'mm'), name=None):
+        """
+        Parameters
+        ----------
+        z_q : Quantity([Length])
+          z-position at which q is defined
+        z_fixed : Quantity([Length])
+          z-position at which the beam is "fixed". When any optical elements are changed, the beam
+          parameter will always be the same at this location.
+        """
+        z_q = ensure_units(z_q, 'mm')
+        z_fixed = ensure_units(z_fixed, 'mm')
+        self.path = path
+        self.name = name
+
+        zs, Mxs, Mys, n_pairs = path_info(self.elems, self.ns, add_spaces=False)
+        i1 = insertion_index(zs, z_q)
+        i2 = insertion_index(zs, z_fixed)
+
+        if i1 < i2:
+            # Must propagate beam forward to fixed point
+            for z_M, Mx, My, (n1, n2) in tuple(zip(zs, Mxs, Mys, n_pairs))[i1:i2]:
+                qx = qx and qx.apply_ABCD(Mx, z_M, n2=n2)
+                qy = qy and qy.apply_ABCD(My, z_M, n2=n2)
+        elif i1 > i2:
+            #M Must propagate beam backward to fixed point
+            for z_M, Mx, My, (n1, n2) in reversed(tuple(zip(zs, Mxs, Mys, n_pairs))[i2:i1]):
+                qx = qx and qx.unapply_ABCD(Mx, z_M, n1=n1)
+                qy = qy and qy.unapply_ABCD(My, z_M, n1=n1)
+
+        self._qx0 = qx  # TODO
+        self._qy0 = qy  # TODO
+        self._z_q = z_q
+        self._z_fixed = z_fixed
+
+    @property
+    def ns(self):
+        return self.path.ns
+
+    @property
+    def elems(self):
+        return self.path.elems
+
+    @property
+    @listify
+    def qs(self):
+        zs, Mxs, Mys, n_pairs = path_info(self.elems, self.ns)
+        qx, qy = self._leftmost_qs(zs, Mxs, Mys, n_pairs)
+        yield (qx, qy)
+        for z_M, Mx, My, (n1, n2) in zip(zs, Mxs, Mys, n_pairs):
+            qx = qx and qx.apply_ABCD(Mx, z_M, n2=n2)
+            qy = qy and qy.apply_ABCD(My, z_M, n2=n2)
+            yield (qx, qy)
+
+    def _leftmost_qs(self, zs, Mxs, Mys, n_pairs):
+        qx, qy = self._qx0, self._qy0
+
+        # Backpropagate if necessary
+        i_fixed = insertion_index(zs, self._z_fixed)
+        for z_M, Mx, My, (n1, n2) in reversed(tuple(zip(zs, Mxs, Mys, n_pairs))[:i_fixed]):
+            qx = qx and qx.unapply_ABCD(Mx, z_M, n1=n1)
+            qy = qy and qy.unapply_ABCD(My, z_M, n1=n1)
+
+        return qx, qy
+
+    def profiles(self, z_start=None, z_end=None, clipping=None):
+        elems = self.elems[:]
+        ns = self.ns[:]
+
+        if z_start is not None:
+            elems.insert(0, Identity(z_start))
+            ns.insert(0, ns[0])
+        if z_end is not None:
+            elems.append(Identity(z_end))
+            ns.append(ns[-1])
+
+        zs, Mxs, Mys, n_pairs = path_info(elems, ns)
+        qx, qy = self._leftmost_qs(zs, Mxs, Mys, n_pairs)
+
+        all_zs, x_profs, y_profs, x_RoCs, y_RoCs = [], [], [], [], []
+        for Mx, My, (z_M, z_next_M), (n1, n2) in zip(Mxs, Mys, pairwise(zs), n_pairs):
+            # FIXME: Clear up this wavlen/n business
+            qx = qx and qx.apply_ABCD(Mx, z_M, n2=n2)
+            qy = qy and qy.apply_ABCD(My, z_M, n2=n2)
+            z = unitful_linspace(z_M, z_next_M, 1000)
+            all_zs.append(z)
+            x_profs.append(qx.profile(z, clipping))
+            y_profs.append(qy.profile(z, clipping))
+            x_RoCs.append(qx.roc(z))
+            y_RoCs.append(qy.roc(z))
+        return all_zs, x_profs, y_profs, x_RoCs, y_RoCs
+
+    def plot(self, z_start=None, z_end=None, clipping=None, ax=None, mode='xy', **kwds):
+        if mode not in ('x', 'y', 'xy'):
+            raise ValueError("mode must be one of ('x', 'y', 'xy')")
+        zs, x_profs, y_profs, _, _ = self.profiles(z_start, z_end, clipping)
+
+        #if ax is None:
+        #    from matplotlib.pyplot import subplots
+        #    _, ax = subplots()
+        import matplotlib.pyplot as plt
+        zs_flat = chain_qty(*zs)
+        x_profs_flat = chain_qty(*x_profs)
+        y_profs_flat = chain_qty(*y_profs)
+
+        plt_kwds = {'label': self.name}
+        plt_kwds.update(kwds)
+        if 'x' in mode:
+            plt.plot(zs_flat, x_profs_flat, **plt_kwds)
+        if 'y' in mode:
+            plt.plot(zs_flat, y_profs_flat, **plt_kwds)
+
+        ax = plt.gca()
+        if not hasattr(ax, '_vlines'):
+            ax._vlines = {}
+
+        ymin, ymax = ax.get_ylim()
+        for z in zs:
+            zm0 = z.m[0]
+            if zm0 in ax._vlines:
+                ax._vlines[zm0].remove()
+
+            vls = ax.vlines([zm0], 0, ymax,
+                            linestyle='dashed', linewidth=2, color=(.5, .5, .5),
+                            antialiased=True)
+            ax._vlines[zm0] = vls
+        xmin, xmax = ax.get_xlim()
+
+        if hasattr(ax, '_hline'):
+            ax._hline.remove()
+        ax._hline = ax.hlines([0], xmin, xmax, linestyle='dotted', linewidth=2,
+                              color='k', antialiased=True)
+
+        ax.set_xlabel(f'Z Position [{x_profs_flat.units:~}]')
+        ax.set_ylabel(f'Spot size [{y_profs_flat.units:~}]')
+
+    def q_at(self, z):
+        """The BeamParam that for the region that z lies within"""
+        z = ensure_units(z, 'mm')
+        zs, Mxs, Mys, n_pairs = path_info(self.elems, self.ns)
+        qx, qy = self._leftmost_qs(zs, Mxs, Mys, n_pairs)
+
+        for z_M, Mx, My, (n1, n2) in zip(zs, Mxs, Mys, n_pairs):
+            if z < z_M:
+                return (qx, qy)
+            qx = qx and qx.apply_ABCD(Mx, z_M, n2=n2)
+            qy = qy and qy.apply_ABCD(My, z_M, n2=n2)
+        return (qx, qy)
+
+
+def chain_qty(*quantities):
+    qty0 = quantities[0]
+    size = sum(len(qty) for qty in quantities)
+    arr = np.empty((size,), 'float64')
+
+    i = 0
+    for qty in quantities:
+        arr[i:i+len(qty)] = qty.magnitude
+        i += len(qty)
+
+    return Q_(arr, qty0.units)
